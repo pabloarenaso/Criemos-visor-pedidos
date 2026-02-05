@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, RefreshCw, Package, AlertCircle, Search, ArrowUpDown, ChevronDown, ChevronUp, Calendar, CalendarDays } from 'lucide-react';
+import { Eye, RefreshCw, Package, AlertCircle, Search, ArrowUpDown, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
 import { getOrders } from '../services/api';
 import type { Order } from '../types/shopify';
 import { calculateShippingDate } from '../utils/shippingUtils';

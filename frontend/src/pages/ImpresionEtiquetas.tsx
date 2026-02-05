@@ -22,19 +22,6 @@ const PAPER_SIZES = {
     a4: { width: 210, height: 297, name: 'A4 (210x297mm)' },
 };
 
-// Label size: 10x15cm = 100x150mm
-const LABEL_SIZE = { width: 100, height: 150 };
-
-// Calculate max labels per page (used in display text)
-function getLabelsPerPage(paperType: 'carta' | 'oficio' | 'a4'): number {
-    const paper = PAPER_SIZES[paperType];
-    const cols = Math.floor(paper.width / LABEL_SIZE.width);
-    const rows = Math.floor(paper.height / LABEL_SIZE.height);
-    // Hardcoded to 12 for the grid layout regardless of physical calculation
-    return 12;
-}
-
-
 // Convert Shopify address to EditedAddress format
 function toEditedAddress(shopifyAddress: Order['shippingAddress']): EditedAddress | null {
     if (!shopifyAddress) return null;
