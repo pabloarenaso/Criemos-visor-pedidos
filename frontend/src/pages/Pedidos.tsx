@@ -1,9 +1,10 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, RefreshCw, Package, AlertCircle, Search, Filter, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { Eye, RefreshCw, Package, AlertCircle, Search, ArrowUpDown, ChevronDown, ChevronUp, Calendar, CalendarDays } from 'lucide-react';
 import { getOrders } from '../services/api';
 import type { Order } from '../types/shopify';
-import { calculateShippingDate, formatDisplayDate } from '../utils/shippingUtils';
+import { calculateShippingDate } from '../utils/shippingUtils';
+import { useResizable } from '../hooks/useResizable';
 import Card from '../components/Card';
 import Badge, {
     getFinancialStatusVariant,
@@ -13,6 +14,24 @@ import Badge, {
 } from '../components/Badge';
 
 // Format date to DD/MM/YYYY
+function formatDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleDateString('es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+}
+
+// Format dispatch date with day of week
+function formatDispatchDate(date: Date): { date: string, day: string } {
+    const dateStr = date.toLocaleDateString('es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const dayStr = date.toLocaleDateString('es-CL', { weekday: 'long' });
+    return { date: dateStr, day: dayStr.charAt(0).toUpperCase() + dayStr.slice(1) };
+}
 
 // Format currency to CLP
 function formatCurrency(amount: string): string {
@@ -40,8 +59,18 @@ function SkeletonRow() {
     );
 }
 
+// Resize Handle Component
+const ResizeHandle = ({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) => (
+    <div
+        onMouseDown={onMouseDown}
+        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-rose-400 active:bg-rose-600 transition-colors z-10"
+        title="Ajustar ancho"
+    />
+);
+
 // Filter options
 type FulfillmentFilter = 'all' | 'pending' | 'fulfilled';
+type DateFilter = 'all' | '7days' | '15days' | '30days' | '60days' | '90days';
 type SortOrder = 'desc' | 'asc';
 
 export default function Pedidos() {
@@ -51,12 +80,25 @@ export default function Pedidos() {
     const [refreshing, setRefreshing] = useState(false);
     const navigate = useNavigate();
 
+    // Resizable Columns
+    const { columnWidths, onMouseDown } = useResizable({
+        order: 100,
+        customer: 180,
+        product: 250,
+        address: 200,
+        type: 100,
+        date: 100,
+        dispatch: 120,
+        status: 140,
+        actions: 80
+    });
+
     // Filter and search state
     const [searchQuery, setSearchQuery] = useState('');
     const [fulfillmentFilter, setFulfillmentFilter] = useState<FulfillmentFilter>('all');
+    const [dateFilter, setDateFilter] = useState<DateFilter>('all');
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
     const [sortBy, setSortBy] = useState<'purchase' | 'dispatch'>('purchase');
-    const [showFilters, setShowFilters] = useState(false);
 
     // Fetch orders
     const fetchOrders = async (isRefresh = false) => {
@@ -68,7 +110,7 @@ export default function Pedidos() {
             }
             setError(null);
 
-            const response = await getOrders();
+            const response = await getOrders(); // Now defaults to 250 from server
             setOrders(response.data || []);
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Error al cargar pedidos';
@@ -87,14 +129,30 @@ export default function Pedidos() {
     const filteredOrders = useMemo(() => {
         let result = [...orders];
 
-        // Filter by fulfillment status
+        // 1. Filter by fulfillment status
         if (fulfillmentFilter === 'pending') {
             result = result.filter(o => !o.fulfillmentStatus || o.fulfillmentStatus === 'unfulfilled');
         } else if (fulfillmentFilter === 'fulfilled') {
             result = result.filter(o => o.fulfillmentStatus === 'fulfilled');
         }
 
-        // Search by order number or customer
+        // 2. Filter by Date Range
+        if (dateFilter !== 'all') {
+            const now = new Date();
+            const daysMap = {
+                '7days': 7,
+                '15days': 15,
+                '30days': 30,
+                '60days': 60,
+                '90days': 90
+            };
+            const days = daysMap[dateFilter];
+            const cutoffDate = new Date(now.setDate(now.getDate() - days));
+
+            result = result.filter(o => new Date(o.createdAt) >= cutoffDate);
+        }
+
+        // 3. Search by order number or customer
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
             result = result.filter(o =>
@@ -106,7 +164,7 @@ export default function Pedidos() {
             );
         }
 
-        // Sort logic
+        // 4. Sort logic
         result.sort((a, b) => {
             let valA, valB;
 
@@ -121,7 +179,7 @@ export default function Pedidos() {
             return sortOrder === 'desc' ? valB - valA : valA - valB;
         });
         return result;
-    }, [orders, fulfillmentFilter, searchQuery, sortOrder, sortBy]);
+    }, [orders, fulfillmentFilter, dateFilter, searchQuery, sortOrder, sortBy]);
 
     // Stats
     const stats = useMemo(() => ({
@@ -137,22 +195,20 @@ export default function Pedidos() {
                 <Package size={32} className="text-gray-400" />
             </div>
             <h3 className="text-lg font-medium text-gray-800 mb-2">
-                {searchQuery || fulfillmentFilter !== 'all' ? 'Sin resultados' : 'No hay pedidos'}
+                {searchQuery || fulfillmentFilter !== 'all' || dateFilter !== 'all' ? 'Sin resultados' : 'No hay pedidos'}
             </h3>
             <p className="text-gray-500 max-w-sm">
-                {searchQuery || fulfillmentFilter !== 'all'
+                {searchQuery || fulfillmentFilter !== 'all' || dateFilter !== 'all'
                     ? 'No se encontraron pedidos con los filtros aplicados'
                     : 'Cuando recibas pedidos en tu tienda Shopify, aparecerán aquí.'
                 }
             </p>
-            {(searchQuery || fulfillmentFilter !== 'all') && (
-                <button
-                    onClick={() => { setSearchQuery(''); setFulfillmentFilter('all'); }}
-                    className="mt-4 px-4 py-2 text-sm font-medium text-rose-600 hover:text-rose-700"
-                >
-                    Limpiar filtros
-                </button>
-            )}
+            <button
+                onClick={() => { setSearchQuery(''); setFulfillmentFilter('all'); setDateFilter('all'); }}
+                className="mt-4 px-4 py-2 text-sm font-medium text-rose-600 hover:text-rose-700"
+            >
+                Limpiar filtros
+            </button>
         </div>
     );
 
@@ -178,33 +234,18 @@ export default function Pedidos() {
             {/* Page Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-800">Pedidos</h2>
+                    <h2 className="text-2xl font-bold text-gray-800">PEDIDOS</h2>
                     <p className="text-gray-500 mt-1">
                         {!loading && !error && (
                             <>
-                                {filteredOrders.length} de {orders.length} pedido{orders.length !== 1 ? 's' : ''}
-                                {(searchQuery || fulfillmentFilter !== 'all') && ' (filtrado)'}
+                                {filteredOrders.length} de {orders.length} pedido{orders.length !== 1 ? 's' : ''} cargados
+                                {(searchQuery || fulfillmentFilter !== 'all' || dateFilter !== 'all') && ' (filtrado)'}
                             </>
                         )}
                     </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {/* Filter Toggle */}
-                    <button
-                        onClick={() => setShowFilters(!showFilters)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${showFilters || fulfillmentFilter !== 'all'
-                            ? 'bg-rose-50 border-rose-200 text-rose-700'
-                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                            }`}
-                    >
-                        <Filter size={18} />
-                        <span className="text-sm font-medium hidden sm:inline">Filtros</span>
-                        {fulfillmentFilter !== 'all' && (
-                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                        )}
-                    </button>
-
                     {/* Sync Button */}
                     <button
                         onClick={() => fetchOrders(true)}
@@ -222,27 +263,27 @@ export default function Pedidos() {
             </div>
 
             {/* Filters Panel */}
-            {showFilters && (
-                <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        {/* Search */}
-                        <div className="relative flex-1">
-                            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                type="text"
-                                placeholder="Buscar por # orden o cliente..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg
+            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 shadow-sm">
+                <div className="flex flex-col xl:flex-row gap-4">
+                    {/* Search */}
+                    <div className="relative flex-1 min-w-[250px]">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por # orden o cliente..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg
                                          focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500
-                                         transition-colors outline-none"
-                            />
-                        </div>
+                                         transition-colors outline-none h-10"
+                        />
+                    </div>
 
+                    <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
                         {/* Fulfillment Filter */}
                         <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-500">Estado Envío:</span>
-                            <div className="flex bg-gray-100 rounded-lg p-1">
+                            <span className="text-sm text-gray-500 whitespace-nowrap">Estado Envío:</span>
+                            <div className="flex bg-gray-100 rounded-lg p-1 h-10">
                                 {[
                                     { value: 'all', label: 'Todos', count: stats.total },
                                     { value: 'pending', label: 'Pendientes', count: stats.pending },
@@ -251,21 +292,42 @@ export default function Pedidos() {
                                     <button
                                         key={option.value}
                                         onClick={() => setFulfillmentFilter(option.value as FulfillmentFilter)}
-                                        className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${fulfillmentFilter === option.value
+                                        className={`px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-colors ${fulfillmentFilter === option.value
                                             ? 'bg-white text-gray-900 shadow-sm'
                                             : 'text-gray-500 hover:text-gray-700'
                                             }`}
                                     >
-                                        {option.label} ({option.count})
+                                        {option.label}
                                     </button>
                                 ))}
+                            </div>
+                        </div>
+
+                        {/* Date Filter */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-500 whitespace-nowrap"><Calendar size={16} className="inline mr-1" />Fecha:</span>
+                            <div className="relative">
+                                <select
+                                    value={dateFilter}
+                                    onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+                                    className="appearance-none h-10 pl-3 pr-8 border border-gray-200 rounded-lg bg-gray-50 hover:bg-white text-sm focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
+                                    style={{ minWidth: '160px' }}
+                                >
+                                    <option value="all">Histórico (250)</option>
+                                    <option value="7days">Última semana</option>
+                                    <option value="15days">Últimos 15 días</option>
+                                    <option value="30days">Último mes</option>
+                                    <option value="60days">Últimos 2 meses</option>
+                                    <option value="90days">Últimos 3 meses</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             </div>
                         </div>
 
                         {/* Sort Order */}
                         <button
                             onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')}
-                            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors h-10"
                         >
                             <ArrowUpDown size={16} />
                             <span className="text-sm font-medium">
@@ -274,9 +336,9 @@ export default function Pedidos() {
                         </button>
                     </div>
                 </div>
-            )}
+            </div>
 
-            {/* Orders Table Card */}
+            {/* Orders Table Card - Overflow hidden to contain sticky headers logic if needed */}
             <Card padding="none">
                 {/* Error State */}
                 {error && !loading && <ErrorState />}
@@ -287,13 +349,16 @@ export default function Pedidos() {
                         <table className="w-full">
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Orden</th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Fecha</th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Pago</th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Estado Envío</th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
+                                    {/* Mock headers during loading */}
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Orden</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Producto</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Dirección</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Tipo</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Fecha</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Despacho</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Estado Envío</th>
+                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -311,22 +376,36 @@ export default function Pedidos() {
                 {/* Orders Table */}
                 {!loading && !error && filteredOrders.length > 0 && (
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full relative" style={{ tableLayout: 'fixed' }}>
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Orden
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.order }}>
+                                        ORDEN
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'order')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Cliente
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.customer }}>
+                                        CLIENTE
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'customer')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Producto
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.product }}>
+                                        PRODUCTO
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'product')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Dirección
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.address }}>
+                                        DIRECCIÓN
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'address')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.type }}>
+                                        TIPO
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'type')} />
+                                    </th>
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden"
+                                        style={{ width: columnWidths.date }}>
                                         <button
                                             onClick={() => {
                                                 if (sortBy === 'purchase') {
@@ -338,11 +417,13 @@ export default function Pedidos() {
                                             }}
                                             className={`flex items-center gap-1 hover:text-gray-900 ${sortBy === 'purchase' ? 'text-gray-900 border-b border-gray-400' : ''}`}
                                         >
-                                            Compra
+                                            FECHA
                                             {sortBy === 'purchase' && (sortOrder === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />)}
                                         </button>
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'date')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden"
+                                        style={{ width: columnWidths.dispatch }}>
                                         <button
                                             onClick={() => {
                                                 if (sortBy === 'dispatch') {
@@ -354,15 +435,20 @@ export default function Pedidos() {
                                             }}
                                             className={`flex items-center gap-1 hover:text-rose-700 font-bold ${sortBy === 'dispatch' ? 'text-rose-600 border-b border-rose-400' : 'text-rose-500'}`}
                                         >
-                                            Despacho
+                                            DESPACHO
                                             {sortBy === 'dispatch' && (sortOrder === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />)}
                                         </button>
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'dispatch')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50 border-l border-gray-100">
-                                        Info / Pago
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider bg-gray-50 border-l border-gray-100 overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.status }}>
+                                        INFO / PAGO
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'status')} />
                                     </th>
-                                    <th className="px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                        Acción
+                                    <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden"
+                                        style={{ width: columnWidths.actions }}>
+                                        ACCIÓN
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'actions')} />
                                     </th>
                                 </tr>
                             </thead>
@@ -371,6 +457,7 @@ export default function Pedidos() {
                                     const shippingDate = calculateShippingDate(order.createdAt, order.lineItems);
                                     const primaryItem = order.lineItems[0];
                                     const address = order.shippingAddress;
+                                    const isAPedido = order.lineItems.some(item => (item.title || '').toUpperCase().includes('PEDIDO'));
 
                                     return (
                                         <tr
@@ -378,18 +465,18 @@ export default function Pedidos() {
                                             className="hover:bg-gray-50 transition-colors duration-150"
                                         >
                                             {/* Order Number */}
-                                            <td className="px-5 py-4 whitespace-nowrap">
+                                            <td className="px-5 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
                                                 <span className="font-semibold text-gray-900">{order.name}</span>
                                             </td>
 
                                             {/* Customer */}
-                                            <td className="px-5 py-4 whitespace-nowrap text-sm">
+                                            <td className="px-5 py-4 whitespace-nowrap text-sm overflow-hidden text-ellipsis">
                                                 {order.customer ? (
                                                     <div>
-                                                        <p className="text-gray-900 font-medium">
+                                                        <p className="text-gray-900 font-medium truncate" title={`${order.customer.firstName} ${order.customer.lastName}`}>
                                                             {order.customer.firstName} {order.customer.lastName}
                                                         </p>
-                                                        <p className="text-[11px] text-gray-400">{order.customer.email}</p>
+                                                        <p className="text-[11px] text-gray-400 truncate" title={order.customer.email}>{order.customer.email}</p>
                                                     </div>
                                                 ) : (
                                                     <span className="text-gray-400">Invitado</span>
@@ -397,17 +484,17 @@ export default function Pedidos() {
                                             </td>
 
                                             {/* Product Name + Model */}
-                                            <td className="px-5 py-4 min-w-[180px]">
+                                            <td className="px-5 py-4 overflow-hidden">
                                                 {primaryItem ? (
-                                                    <div>
-                                                        <p className="text-gray-900 text-[13px] font-medium leading-tight">
+                                                    <div className="max-w-full">
+                                                        <p className="text-gray-900 text-[13px] font-medium leading-tight truncate" title={primaryItem.title}>
                                                             {primaryItem.title}
                                                         </p>
-                                                        <p className="text-[11px] text-gray-500 italic mt-0.5">
+                                                        <p className="text-[11px] text-gray-500 italic mt-0.5 truncate" title={primaryItem.variantTitle}>
                                                             {primaryItem.variantTitle || 'Sin modelo'}
                                                             {order.lineItems.length > 1 && (
                                                                 <span className="ml-1 text-rose-500 font-semibold not-italic">
-                                                                    (+{order.lineItems.length - 1} otro)
+                                                                    (+{order.lineItems.length - 1})
                                                                 </span>
                                                             )}
                                                         </p>
@@ -418,36 +505,45 @@ export default function Pedidos() {
                                             </td>
 
                                             {/* Address */}
-                                            <td className="px-5 py-4 text-xs text-gray-600 min-w-[160px]">
+                                            <td className="px-5 py-4 text-xs text-gray-600 overflow-hidden">
                                                 {address ? (
-                                                    <div className="line-clamp-2">
-                                                        <p className="font-medium text-gray-700">{address.address1}</p>
-                                                        <p className="text-gray-400">{address.city}, {address.province}</p>
+                                                    <div className="truncate">
+                                                        <p className="font-medium text-gray-700 truncate" title={address.address1}>{address.address1}</p>
+                                                        <p className="text-gray-400 truncate" title={`${address.city}, ${address.province}`}>{address.city}, {address.province}</p>
                                                     </div>
                                                 ) : (
                                                     <span className="text-gray-400">—</span>
                                                 )}
                                             </td>
 
+                                            {/* TIPO */}
+                                            <td className="px-5 py-4 whitespace-nowrap overflow-hidden">
+                                                {isAPedido ? (
+                                                    <Badge variant="warning" size="sm">A PEDIDO</Badge>
+                                                ) : (
+                                                    <Badge variant="success" size="sm">EN STOCK</Badge>
+                                                )}
+                                            </td>
+
                                             {/* Date Buy */}
-                                            <td className="px-5 py-4 whitespace-nowrap text-gray-600 text-sm">
-                                                {formatDisplayDate(new Date(order.createdAt))}
+                                            <td className="px-5 py-4 whitespace-nowrap text-gray-600 text-sm overflow-hidden">
+                                                {formatDate(order.createdAt)}
                                             </td>
 
                                             {/* Shipping Date */}
-                                            <td className="px-5 py-4 whitespace-nowrap">
+                                            <td className="px-5 py-4 whitespace-nowrap overflow-hidden">
                                                 <div className="flex flex-col">
                                                     <span className="text-rose-600 font-bold text-sm">
-                                                        {formatDisplayDate(shippingDate)}
+                                                        {formatDispatchDate(shippingDate).date}
                                                     </span>
-                                                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter">
-                                                        Fecha Despacho
+                                                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter font-semibold">
+                                                        {formatDispatchDate(shippingDate).day}
                                                     </span>
                                                 </div>
                                             </td>
 
                                             {/* Grouped Status/Resumen */}
-                                            <td className="px-5 py-4 whitespace-nowrap bg-gray-50/30 border-l border-gray-100">
+                                            <td className="px-5 py-4 whitespace-nowrap bg-gray-50/30 border-l border-gray-100 overflow-hidden">
                                                 <div className="flex flex-col gap-1.5 min-w-[120px]">
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-[10px] text-gray-400 uppercase font-medium">Monto:</span>
@@ -471,7 +567,7 @@ export default function Pedidos() {
                                             </td>
 
                                             {/* Actions */}
-                                            <td className="px-5 py-4 whitespace-nowrap">
+                                            <td className="px-5 py-4 whitespace-nowrap overflow-hidden">
                                                 <button
                                                     onClick={() => navigate(`/pedidos/${order.id}`)}
                                                     className="p-2 text-rose-600 hover:bg-rose-50 rounded-full transition-colors flex items-center justify-center"

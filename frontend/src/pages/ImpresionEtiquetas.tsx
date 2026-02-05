@@ -1,11 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
-import Barcode from 'react-barcode';
 import {
     Printer,
     ArrowLeft,
-    Settings2,
     Check,
     Package,
     Edit3,
@@ -18,25 +15,25 @@ import {
     hasEditedAddress,
 } from '../utils/addressStorage';
 
-// Print format options
-type PrintFormat = 'individual' | '2-per-page' | '4-per-page';
-
 // Paper sizes in mm
 const PAPER_SIZES = {
-    carta: { width: 216, height: 279, name: 'Carta' },
-    oficio: { width: 216, height: 330, name: 'Oficio' },
+    carta: { width: 216, height: 279, name: 'Carta (216x279mm)' },
+    oficio: { width: 216, height: 330, name: 'Oficio (216x330mm)' },
+    a4: { width: 210, height: 297, name: 'A4 (210x297mm)' },
 };
 
 // Label size: 10x15cm = 100x150mm
 const LABEL_SIZE = { width: 100, height: 150 };
 
-// Calculate max labels per page
-function getLabelsPerPage(paperType: 'carta' | 'oficio'): number {
+// Calculate max labels per page (used in display text)
+function getLabelsPerPage(paperType: 'carta' | 'oficio' | 'a4'): number {
     const paper = PAPER_SIZES[paperType];
     const cols = Math.floor(paper.width / LABEL_SIZE.width);
     const rows = Math.floor(paper.height / LABEL_SIZE.height);
-    return cols * rows;
+    // Hardcoded to 12 for the grid layout regardless of physical calculation
+    return 12;
 }
+
 
 // Convert Shopify address to EditedAddress format
 function toEditedAddress(shopifyAddress: Order['shippingAddress']): EditedAddress | null {
@@ -73,16 +70,60 @@ function formatCurrency(value: string | number): string {
 // Single Label Component
 interface LabelProps {
     order: Order;
-    showQR: boolean;
     showProducts: boolean;
-    showBarcode: boolean;
+    compact?: boolean;
 }
 
-function ShippingLabel({ order, showQR, showProducts, showBarcode }: LabelProps) {
+function ShippingLabel({ order, showProducts, compact }: LabelProps) {
     const address = getDisplayAddress(order);
     const isEdited = hasEditedAddress(order.id);
     const itemCount = order.lineItems?.length || 0;
 
+    // Compact Mode (12 per page)
+    if (compact) {
+        return (
+            <div className="label-container bg-white border border-gray-400 overflow-hidden text-xs relative"
+                style={{ width: '100%', height: '100%', pageBreakInside: 'avoid' }}>
+                <div className="p-2 h-full flex flex-col justify-between">
+                    {/* Header */}
+                    <div className="flex justify-between items-start border-b border-gray-200 pb-1 mb-1">
+                        <div>
+                            <span className="font-bold text-sm block">{order.name}</span>
+                            <span className="text-[10px] text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <span className="font-bold">Criemos</span>
+                    </div>
+
+                    {/* Address */}
+                    <div className="flex-1 min-h-0">
+                        {address ? (
+                            <div className="space-y-0.5 leading-tight">
+                                <p className="font-bold text-gray-900 truncate uppercase">
+                                    {address.firstName} {address.lastName}
+                                </p>
+                                <p className="text-gray-600 truncate">{address.address1} {address.address2}</p>
+                                <p className="text-gray-600 truncate">{address.city}, {address.province}</p>
+                                <p className="text-gray-600 truncate">Phone: {address.phone}</p>
+                            </div>
+                        ) : (
+                            <p className="text-gray-400 italic">Sin dirección</p>
+                        )}
+                    </div>
+
+                    {/* Products Summary */}
+                    {showProducts && itemCount > 0 && (
+                        <div className="mt-1 pt-1 border-t border-gray-200 text-[10px] text-gray-700">
+                            <div className="line-clamp-2">
+                                {order.lineItems.map(i => `${i.quantity}x ${i.title}`).join(', ')}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Standard Label
     return (
         <div className="label-container bg-white border-2 border-gray-800 rounded-lg overflow-hidden"
             style={{ width: '100mm', height: '150mm', pageBreakAfter: 'always' }}>
@@ -174,33 +215,6 @@ function ShippingLabel({ order, showQR, showProducts, showBarcode }: LabelProps)
                 </div>
             </div>
 
-            {/* Codes Section */}
-            {(showQR || showBarcode) && (
-                <div className="px-4 py-3 flex items-center justify-center gap-4">
-                    {showQR && (
-                        <div className="flex flex-col items-center">
-                            <QRCodeSVG
-                                value={`https://criemos.cl/order/${order.id}`}
-                                size={60}
-                                level="M"
-                            />
-                            <span className="text-xs text-gray-400 mt-1">Seguimiento</span>
-                        </div>
-                    )}
-                    {showBarcode && (
-                        <div className="flex flex-col items-center">
-                            <Barcode
-                                value={order.orderNumber?.toString() || order.id.toString()}
-                                width={1.2}
-                                height={40}
-                                fontSize={10}
-                                margin={0}
-                                displayValue={true}
-                            />
-                        </div>
-                    )}
-                </div>
-            )}
 
             {/* Footer */}
             <div className="absolute bottom-0 left-0 right-0 px-4 py-1 bg-gray-900 text-white text-center">
@@ -218,13 +232,9 @@ export default function ImpresionEtiquetas() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Print options
-    const [printFormat, setPrintFormat] = useState<PrintFormat>('individual');
-    const [paperType, setPaperType] = useState<'carta' | 'oficio'>('carta');
-    const [showQR, setShowQR] = useState(true);
+    // Print options - Fixed to 12 per page logic
+    const [paperType, setPaperType] = useState<'carta' | 'oficio' | 'a4'>('carta');
     const [showProducts, setShowProducts] = useState(true);
-    const [showBarcode, setShowBarcode] = useState(true);
-    const [showSettings, setShowSettings] = useState(false);
 
     // Get order IDs from URL
     const orderIdsParam = searchParams.get('orders');
@@ -265,9 +275,23 @@ export default function ImpresionEtiquetas() {
         fetchData();
     }, [orderIds]);
 
-    // Calculate max labels info
-    const maxLabels = getLabelsPerPage(paperType);
-    const totalPages = Math.ceil(orders.length / (printFormat === 'individual' ? 1 : printFormat === '2-per-page' ? 2 : 4));
+    // Calculate chunks - Always 12 per page
+    const labelsPerPage = 12;
+
+    const orderChunks = useMemo(() => {
+        const chunks = [];
+        for (let i = 0; i < orders.length; i += labelsPerPage) {
+            // Pad the chunk with nulls if needed to fill the grid visually? 
+            // User said: "simplemete se deja en blanco esa casilla". 
+            // So we don't strictly need to pad the array with nulls unless we want to render empty borders.
+            // The request "cuadricular la hoja en 12 partes" might imply visible empty boxes, 
+            // but "deja en blanco" likely means just empty space. 
+            // However, to ensure the grid is exactly 2x6, the CSS grid handles that.
+            // We just push the slice.
+            chunks.push(orders.slice(i, i + labelsPerPage));
+        }
+        return chunks;
+    }, [orders]);
 
     // Handle print
     const handlePrint = () => {
@@ -307,6 +331,21 @@ export default function ImpresionEtiquetas() {
         <>
             {/* Print Styles */}
             <style>{`
+                @media screen {
+                    .sheet-container {
+                        background: white;
+                        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                        margin-bottom: 2rem;
+                        margin-left: auto;
+                        margin-right: auto;
+                        /* Use defined paper size */
+                        width: ${PAPER_SIZES[paperType].width}mm;
+                        height: ${PAPER_SIZES[paperType].height}mm;
+                        padding: 5mm; /* Visual padding for screen */
+                        overflow: hidden;
+                    }
+                }
+
                 @media print {
                     body * {
                         visibility: hidden;
@@ -323,31 +362,47 @@ export default function ImpresionEtiquetas() {
                     .no-print {
                         display: none !important;
                     }
-                    .label-container {
+                    
+                    /* Sheet Handling for Print */
+                    .sheet-container {
+                        width: 100%;
+                        height: 100%; /* Fill the page */
                         page-break-after: always;
-                        page-break-inside: avoid;
-                        margin: 0 auto;
-                        box-shadow: none !important;
-                        border-radius: 0 !important;
+                        padding: 5mm; /* Physical print margin - MOVED HERE so @page can be 0 */
+                        margin: 0;
+                        box-shadow: none;
+                        border: none;
+                        overflow: hidden;
                     }
-                    .label-container:last-child {
+                    .sheet-container:last-child {
                         page-break-after: auto;
                     }
+
                     @page {
-                        size: ${printFormat === 'individual' ? '100mm 150mm' : paperType === 'carta' ? 'letter' : 'legal'};
-                        margin: ${printFormat === 'individual' ? '0' : '10mm'};
+                        size: ${paperType === 'carta' ? 'letter' : paperType === 'a4' ? 'A4' : 'legal'};
+                        margin: 0mm; /* ZERO MARGIN to remove browser headers/footers */
                     }
-                    .labels-grid-2 {
-                        display: grid;
-                        grid-template-columns: repeat(2, 1fr);
-                        gap: 5mm;
+                
+                    .label-container {
+                        border: 1px dashed #ccc !important;
+                        border-radius: 4px !important;
                     }
-                    .labels-grid-4 {
-                        display: grid;
-                        grid-template-columns: repeat(2, 1fr);
-                        grid-template-rows: repeat(2, 1fr);
-                        gap: 5mm;
-                    }
+                }
+
+                /* Grid Styles - Fixed to 12-up Layout */
+                .labels-grid-12 {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    grid-template-rows: repeat(6, 1fr);
+                    gap: 2mm;
+                    height: 100%;
+                    align-content: start;
+                }
+                
+                /* Label Sizing - Fixed Dimensions for 12-up */
+                .labels-grid-12 .label-container { 
+                    height: 42mm !important; 
+                    width: 100% !important; 
                 }
             `}</style>
 
@@ -365,19 +420,12 @@ export default function ImpresionEtiquetas() {
                             <h2 className="text-2xl font-bold text-gray-800">Impresión de Etiquetas</h2>
                             <p className="text-gray-500 mt-1">
                                 {orders.length} etiqueta{orders.length !== 1 ? 's' : ''} •
-                                {totalPages} página{totalPages !== 1 ? 's' : ''}
+                                {orderChunks.length} página{orderChunks.length !== 1 ? 's' : ''}
                             </p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setShowSettings(!showSettings)}
-                            className={`p-2.5 rounded-lg transition-colors ${showSettings ? 'bg-gray-200 text-gray-800' : 'hover:bg-gray-100 text-gray-600'
-                                }`}
-                        >
-                            <Settings2 size={20} />
-                        </button>
                         <button
                             onClick={handlePrint}
                             disabled={orders.length === 0}
@@ -393,95 +441,60 @@ export default function ImpresionEtiquetas() {
                     </div>
                 </div>
 
-                {/* Settings Panel - No Print */}
-                {showSettings && (
-                    <div className="no-print bg-white rounded-xl border border-gray-200 p-4">
-                        <h3 className="font-semibold text-gray-800 mb-4">Opciones de Impresión</h3>
+                {/* Fixed Settings Panel - Always Visible */}
+                <div className="no-print bg-white rounded-xl border border-gray-200 p-4">
+                    <h3 className="font-semibold text-gray-800 mb-4">Opciones de Impresión</h3>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {/* Format */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-2">
-                                    Formato
-                                </label>
-                                <select
-                                    value={printFormat}
-                                    onChange={(e) => setPrintFormat(e.target.value as PrintFormat)}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none"
-                                >
-                                    <option value="individual">Individual (10x15cm)</option>
-                                    <option value="2-per-page">2 por página</option>
-                                    <option value="4-per-page">4 por página</option>
-                                </select>
-                            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* Paper Type */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 mb-2">
+                                Tipo de Papel
+                            </label>
+                            <select
+                                value={paperType}
+                                onChange={(e) => setPaperType(e.target.value as 'carta' | 'oficio' | 'a4')}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none"
+                            >
+                                <option value="carta">Carta (216x279mm)</option>
+                                <option value="a4">A4 (210x297mm)</option>
+                                <option value="oficio">Oficio (216x330mm)</option>
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">
+                                12 etiquetas máx. por hoja
+                            </p>
+                        </div>
 
-                            {/* Paper Type */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-2">
-                                    Tipo de Papel
-                                </label>
-                                <select
-                                    value={paperType}
-                                    onChange={(e) => setPaperType(e.target.value as 'carta' | 'oficio')}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none"
-                                >
-                                    <option value="carta">Carta (216x279mm)</option>
-                                    <option value="oficio">Oficio (216x330mm)</option>
-                                </select>
-                                <p className="text-xs text-gray-400 mt-1">
-                                    Máx. {maxLabels} etiquetas por hoja
-                                </p>
-                            </div>
+                        {/* Checkboxes */}
+                        <div className="space-y-2">
+                            <label className="block text-sm font-medium text-gray-600 mb-2">
+                                Contenido
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={showProducts}
+                                    onChange={(e) => setShowProducts(e.target.checked)}
+                                    className="w-4 h-4 text-rose-500 border-gray-300 rounded focus:ring-rose-500"
+                                />
+                                <span className="text-sm text-gray-700">Lista de productos</span>
+                            </label>
+                        </div>
 
-                            {/* Checkboxes */}
-                            <div className="space-y-2">
-                                <label className="block text-sm font-medium text-gray-600 mb-2">
-                                    Contenido
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={showQR}
-                                        onChange={(e) => setShowQR(e.target.checked)}
-                                        className="w-4 h-4 text-rose-500 border-gray-300 rounded focus:ring-rose-500"
-                                    />
-                                    <span className="text-sm text-gray-700">Código QR</span>
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={showBarcode}
-                                        onChange={(e) => setShowBarcode(e.target.checked)}
-                                        className="w-4 h-4 text-rose-500 border-gray-300 rounded focus:ring-rose-500"
-                                    />
-                                    <span className="text-sm text-gray-700">Código de barras</span>
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={showProducts}
-                                        onChange={(e) => setShowProducts(e.target.checked)}
-                                        className="w-4 h-4 text-rose-500 border-gray-300 rounded focus:ring-rose-500"
-                                    />
-                                    <span className="text-sm text-gray-700">Lista de productos</span>
-                                </label>
-                            </div>
-
-                            {/* Info */}
-                            <div className="bg-blue-50 rounded-lg p-3">
-                                <div className="flex items-start gap-2">
-                                    <Check size={16} className="text-blue-600 mt-0.5" />
-                                    <div className="text-xs text-blue-700">
-                                        <p className="font-medium mb-1">Tip de impresión</p>
-                                        <p>Usa papel adhesivo de 10x15cm para mejores resultados.</p>
-                                    </div>
+                        {/* Info */}
+                        <div className="bg-blue-50 rounded-lg p-3">
+                            <div className="flex items-start gap-2">
+                                <Check size={16} className="text-blue-600 mt-0.5" />
+                                <div className="text-xs text-blue-700">
+                                    <p className="font-medium mb-1">Tip de impresión</p>
+                                    <p>Asegúrate de configurar "Escala" al 100% y "Márgenes" en ninguno.</p>
                                 </div>
                             </div>
                         </div>
                     </div>
-                )}
+                </div>
 
-                {/* Labels Preview */}
+                {/* Labels Preview (Paginated) */}
                 {orders.length === 0 ? (
                     <div className="no-print bg-white rounded-xl border border-gray-200 p-12 text-center">
                         <Package size={48} className="mx-auto text-gray-300 mb-4" />
@@ -499,29 +512,33 @@ export default function ImpresionEtiquetas() {
                         </button>
                     </div>
                 ) : (
-                    <div className={`print-area ${printFormat === '2-per-page' ? 'labels-grid-2' :
-                        printFormat === '4-per-page' ? 'labels-grid-4' : ''
-                        }`}>
-                        <div className={`
-                            grid gap-6 
-                            ${printFormat === 'individual' ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' : ''}
-                            ${printFormat === '2-per-page' ? 'grid-cols-2' : ''}
-                            ${printFormat === '4-per-page' ? 'grid-cols-2' : ''}
-                        `}>
-                            {orders.map((order) => (
-                                <div key={order.id} className="flex justify-center">
-                                    <ShippingLabel
-                                        order={order}
-                                        showQR={showQR}
-                                        showProducts={showProducts}
-                                        showBarcode={showBarcode}
-                                    />
+                    <div className="print-area w-full overflow-x-auto bg-gray-100 p-8 min-h-screen">
+                        {orderChunks.map((chunk, pageIndex) => (
+                            <div
+                                key={pageIndex}
+                                className="sheet-container relative"
+                            >
+                                <div className="labels-grid-12">
+                                    {chunk.map((order) => (
+                                        <ShippingLabel
+                                            key={order.id}
+                                            order={order}
+                                            showProducts={showProducts}
+                                            compact={true} // Always use compact/clean design
+                                        />
+                                    ))}
+                                    {/* Empty slots handled by CSS Grid structure naturally */}
                                 </div>
-                            ))}
-                        </div>
+                                {/* Page Number (visual only) */}
+                                <div className="no-print absolute -bottom-8 left-1/2 -translate-x-1/2 text-sm text-gray-500">
+                                    Página {pageIndex + 1} de {orderChunks.length}
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
         </>
     );
 }
+

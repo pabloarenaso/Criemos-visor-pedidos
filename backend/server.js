@@ -99,7 +99,7 @@ async function shopifyRequest(endpoint, method = 'GET', body = null) {
 // Obtener todos los pedidos
 app.get('/api/orders', async (req, res) => {
   try {
-    const { status = 'any', limit = 50 } = req.query;
+    const { status = 'any', limit = 250 } = req.query;
     const data = await shopifyRequest(`/orders.json?status=${status}&limit=${limit}`);
 
     // Formatear datos para el frontend

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { getOrders } from '../services/api';
 import type { Order } from '../types/shopify';
-import { calculateShippingDate, formatDisplayDate } from '../utils/shippingUtils';
+import { calculateShippingDate } from '../utils/shippingUtils';
 import Card from '../components/Card';
 import Badge from '../components/Badge';
 import {
@@ -30,6 +30,16 @@ import {
     revertToOriginal,
     formatAddressForDisplay,
 } from '../utils/addressStorage';
+import { useResizable } from '../hooks/useResizable';
+
+// Resize Handle Component
+const ResizeHandle = ({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => void }) => (
+    <div
+        onMouseDown={onMouseDown}
+        className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-rose-400 active:bg-rose-600 transition-colors z-10"
+        title="Ajustar ancho"
+    />
+);
 
 // Convert Shopify address to our format
 function toEditedAddress(shopifyAddress: Order['shippingAddress']): EditedAddress | null {
@@ -66,6 +76,17 @@ function formatTimestamp(isoString: string): string {
     if (diffHours < 24) return `Hace ${diffHours}h`;
     if (diffDays === 1) return 'Ayer';
     return date.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// Format dispatch date with day of week
+function formatDispatchDate(date: Date): { date: string, day: string } {
+    const dateStr = date.toLocaleDateString('es-CL', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const dayStr = date.toLocaleDateString('es-CL', { weekday: 'long' });
+    return { date: dateStr, day: dayStr.charAt(0).toUpperCase() + dayStr.slice(1) };
 }
 
 // Loading skeleton row
@@ -383,6 +404,18 @@ export default function PreparacionEnvio() {
     const [sortBy, setSortBy] = useState<'purchase' | 'dispatch'>('dispatch');
     const [, forceUpdate] = useState({});
 
+    // Resizable Columns
+    const { columnWidths, onMouseDown } = useResizable({
+        checkbox: 48,
+        order: 100,
+        customer: 180,
+        product: 200,
+        address: 250, // Wider for address editing
+        dispatch: 120,
+        status: 100,
+        actions: 100
+    });
+
     // Filter orders based on search term
     const filteredOrders = useMemo(() => {
         const filtered = orders.filter(order => {
@@ -601,10 +634,10 @@ export default function PreparacionEnvio() {
 
                 {!loading && !error && filteredOrders.length > 0 && (
                     <div className="overflow-x-auto">
-                        <table className="w-full">
+                        <table className="w-full relative" style={{ tableLayout: 'fixed' }}>
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
-                                    <th className="px-4 py-3 w-12">
+                                    <th className="relative px-4 py-3 w-12 overflow-hidden" style={{ width: columnWidths.checkbox }}>
                                         <input
                                             type="checkbox"
                                             checked={selectedOrders.size === filteredOrders.length && filteredOrders.length > 0}
@@ -612,7 +645,8 @@ export default function PreparacionEnvio() {
                                             className="w-4 h-4 text-rose-500 border-gray-300 rounded focus:ring-rose-500"
                                         />
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.order }}>
                                         <button
                                             onClick={() => {
                                                 if (sortBy === 'purchase') {
@@ -624,14 +658,28 @@ export default function PreparacionEnvio() {
                                             }}
                                             className={`hover:text-gray-900 flex items-center gap-1 ${sortBy === 'purchase' ? 'text-gray-900 font-bold' : ''}`}
                                         >
-                                            Orden
+                                            ORDEN
                                             {sortBy === 'purchase' && (sortOrder === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />)}
                                         </button>
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'order')} />
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Cliente</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Producto</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Dirección</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.customer }}>
+                                        CLIENTE
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'customer')} />
+                                    </th>
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.product }}>
+                                        PRODUCTO
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'product')} />
+                                    </th>
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden text-ellipsis"
+                                        style={{ width: columnWidths.address }}>
+                                        DIRECCIÓN
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'address')} />
+                                    </th>
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden"
+                                        style={{ width: columnWidths.dispatch }}>
                                         <button
                                             onClick={() => {
                                                 if (sortBy === 'dispatch') {
@@ -643,12 +691,21 @@ export default function PreparacionEnvio() {
                                             }}
                                             className={`hover:text-rose-700 flex items-center gap-1 font-bold ${sortBy === 'dispatch' ? 'text-rose-600 border-b border-rose-400' : 'text-rose-400'}`}
                                         >
-                                            Despacho
+                                            FECHA DESPACHO
                                             {sortBy === 'dispatch' && (sortOrder === 'desc' ? <ChevronDown size={14} /> : <ChevronUp size={14} />)}
                                         </button>
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'dispatch')} />
                                     </th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Estado</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Acciones</th>
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden"
+                                        style={{ width: columnWidths.status }}>
+                                        ESTADO
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'status')} />
+                                    </th>
+                                    <th className="relative px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase overflow-hidden"
+                                        style={{ width: columnWidths.actions }}>
+                                        ACCIONES
+                                        <ResizeHandle onMouseDown={(e) => onMouseDown(e, 'actions')} />
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -709,9 +766,11 @@ export default function PreparacionEnvio() {
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <span className="text-rose-600 font-bold">
-                                                        {formatDisplayDate(shippingDate)}
+                                                        {formatDispatchDate(shippingDate).date}
                                                     </span>
-                                                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter">Estimado</span>
+                                                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter">
+                                                        {formatDispatchDate(shippingDate).day}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
@@ -763,4 +822,3 @@ export default function PreparacionEnvio() {
         </div>
     );
 }
-
