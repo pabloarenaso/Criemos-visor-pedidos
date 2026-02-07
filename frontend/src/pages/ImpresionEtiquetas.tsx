@@ -90,7 +90,10 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                                 </p>
                                 <p className="text-gray-600 truncate">{address.address1} {address.address2}</p>
                                 <p className="text-gray-600 truncate">{address.city}, {address.province}</p>
-                                <p className="text-gray-600 truncate">Phone: {address.phone}</p>
+                                <p className="text-gray-600 truncate">{address.phone}</p>
+                                <p className="text-gray-600 truncate leading-tight font-medium text-[9px] sm:text-[10px] mt-0.5" title={order.email || order.customer?.email}>
+                                    {order.email || order.customer?.email || ''}
+                                </p>
                             </div>
                         ) : (
                             <p className="text-gray-400 italic">Sin dirección</p>
@@ -161,6 +164,11 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                         )}
                         {address.phone && (
                             <p className="text-sm text-gray-600">Tel: {address.phone}</p>
+                        )}
+                        {(order.email || order.customer?.email) && (
+                            <p className="text-sm text-gray-600 truncate font-medium mt-1">
+                                {order.email || order.customer?.email}
+                            </p>
                         )}
                     </div>
                 ) : (
