@@ -193,7 +193,7 @@ export interface PaginatedApiResponse<T> {
 
 // Datos de tracking para fulfillment
 export interface TrackingData {
-    trackingNumber: string;
+    trackingNumber?: string;
     trackingCompany?: string;
     trackingUrl?: string;
     notifyCustomer?: boolean;

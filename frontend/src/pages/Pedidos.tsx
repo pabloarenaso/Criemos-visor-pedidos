@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, RefreshCw, Package, AlertCircle, Search, ArrowUpDown, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
-import { getOrders } from '../services/api';
+import { Eye, RefreshCw, Package, AlertCircle, Search, ArrowUpDown, ChevronDown, ChevronUp, Calendar, CheckSquare, Square } from 'lucide-react';
+import { getOrders, ordersApi } from '../services/api';
 import type { Order } from '../types/shopify';
 import { calculateShippingDate } from '../utils/shippingUtils';
 import { useResizable } from '../hooks/useResizable';
@@ -12,6 +12,7 @@ import Badge, {
     translateFinancialStatus,
     translateFulfillmentStatus,
 } from '../components/Badge';
+import BulkFulfillModal from '../components/BulkFulfillModal';
 
 // Format date to DD/MM/YYYY
 function formatDate(dateStr: string): string {
@@ -100,6 +101,58 @@ export default function Pedidos() {
     const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
     const [sortBy, setSortBy] = useState<'purchase' | 'dispatch'>('purchase');
 
+    // Bulk Actions State
+    const [selectedOrders, setSelectedOrders] = useState<Set<number>>(new Set());
+    const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [isBulkFulfilling, setIsBulkFulfilling] = useState(false);
+
+    // Toggle single order selection
+    const toggleOrder = (id: number) => {
+        const newSelected = new Set(selectedOrders);
+        if (newSelected.has(id)) {
+            newSelected.delete(id);
+        } else {
+            newSelected.add(id);
+        }
+        setSelectedOrders(newSelected);
+    };
+
+    // Toggle all visible orders
+    const toggleAll = () => {
+        if (selectedOrders.size === filteredOrders.length && filteredOrders.length > 0) {
+            setSelectedOrders(new Set());
+        } else {
+            setSelectedOrders(new Set(filteredOrders.map(o => o.id)));
+        }
+    };
+
+    // Bulk Fulfill Handler - Now accepts payload per order
+    const handleBulkFulfill = async (payload: Record<number, { trackingNumber?: string, trackingCompany?: string, trackingUrl?: string }>) => {
+        setIsBulkFulfilling(true);
+        try {
+            const promises = Object.entries(payload).map(([orderId, data]) =>
+                ordersApi.fulfill(orderId, {
+                    trackingNumber: data.trackingNumber || undefined,
+                    trackingCompany: data.trackingCompany || undefined,
+                    trackingUrl: data.trackingUrl || undefined
+                })
+            );
+
+            await Promise.all(promises);
+
+            // Success
+            setIsBulkModalOpen(false);
+            setSelectedOrders(new Set());
+            fetchOrders(true); // Refresh data
+        } catch (err) {
+            console.error('Error fulfilling orders:', err);
+            alert('Error al procesar algunos pedidos. Por favor revisa la consola.');
+        } finally {
+            setIsBulkFulfilling(false);
+        }
+    };
+
+
     // Fetch orders
     const fetchOrders = async (isRefresh = false) => {
         try {
@@ -180,6 +233,10 @@ export default function Pedidos() {
         });
         return result;
     }, [orders, fulfillmentFilter, dateFilter, searchQuery, sortOrder, sortBy]);
+    // Memoized selected orders list
+    const selectedOrdersList = useMemo(() => {
+        return filteredOrders.filter(o => selectedOrders.has(o.id));
+    }, [filteredOrders, selectedOrders]);
 
     // Stats
     const stats = useMemo(() => ({
@@ -263,79 +320,104 @@ export default function Pedidos() {
             </div>
 
             {/* Filters Panel */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4 shadow-sm">
-                <div className="flex flex-col xl:flex-row gap-4">
-                    {/* Search */}
-                    <div className="relative flex-1 min-w-[250px]">
-                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar por # orden o cliente..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg
-                                         focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500
-                                         transition-colors outline-none h-10"
-                        />
-                    </div>
+            <div className={`bg-white rounded-xl border ${selectedOrders.size > 0 ? 'border-rose-200 ring-1 ring-rose-100' : 'border-gray-200'} p-4 space-y-4 shadow-sm transition-all duration-300`}>
 
-                    <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
-                        {/* Fulfillment Filter */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-500 whitespace-nowrap">Estado Envío:</span>
-                            <div className="flex bg-gray-100 rounded-lg p-1 h-10">
-                                {[
-                                    { value: 'all', label: 'Todos', count: stats.total },
-                                    { value: 'pending', label: 'Pendientes', count: stats.pending },
-                                    { value: 'fulfilled', label: 'Enviados', count: stats.fulfilled },
-                                ].map((option) => (
-                                    <button
-                                        key={option.value}
-                                        onClick={() => setFulfillmentFilter(option.value as FulfillmentFilter)}
-                                        className={`px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-colors ${fulfillmentFilter === option.value
-                                            ? 'bg-white text-gray-900 shadow-sm'
-                                            : 'text-gray-500 hover:text-gray-700'
-                                            }`}
-                                    >
-                                        {option.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Date Filter */}
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-500 whitespace-nowrap"><Calendar size={16} className="inline mr-1" />Fecha:</span>
-                            <div className="relative">
-                                <select
-                                    value={dateFilter}
-                                    onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-                                    className="appearance-none h-10 pl-3 pr-8 border border-gray-200 rounded-lg bg-gray-50 hover:bg-white text-sm focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
-                                    style={{ minWidth: '160px' }}
-                                >
-                                    <option value="all">Histórico (250)</option>
-                                    <option value="7days">Última semana</option>
-                                    <option value="15days">Últimos 15 días</option>
-                                    <option value="30days">Último mes</option>
-                                    <option value="60days">Últimos 2 meses</option>
-                                    <option value="90days">Últimos 3 meses</option>
-                                </select>
-                                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                            </div>
-                        </div>
-
-                        {/* Sort Order */}
-                        <button
-                            onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')}
-                            className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors h-10"
-                        >
-                            <ArrowUpDown size={16} />
-                            <span className="text-sm font-medium">
-                                {sortOrder === 'desc' ? 'Más recientes' : 'Más antiguos'}
+                {/* Bulk Action Bar (Overlays filters when active) */}
+                {selectedOrders.size > 0 ? (
+                    <div className="flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="flex items-center gap-3">
+                            <span className="bg-rose-100 text-rose-700 px-3 py-1 rounded-full text-sm font-medium">
+                                {selectedOrders.size} seleccionado{selectedOrders.size !== 1 ? 's' : ''}
                             </span>
+                            <button
+                                onClick={() => setSelectedOrders(new Set())}
+                                className="text-gray-500 hover:text-gray-700 text-sm underline"
+                            >
+                                Deseleccionar todo
+                            </button>
+                        </div>
+                        <button
+                            onClick={() => setIsBulkModalOpen(true)}
+                            className="bg-rose-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm hover:bg-rose-700 transition-colors flex items-center gap-2"
+                        >
+                            <Package size={18} />
+                            Marcar como Enviados
                         </button>
                     </div>
-                </div>
+                ) : (
+                    <div className="flex flex-col xl:flex-row gap-4">
+                        {/* Search */}
+                        <div className="relative flex-1 min-w-[250px]">
+                            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Buscar por # orden o cliente..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg
+                                             focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500
+                                             transition-colors outline-none h-10"
+                            />
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
+                            {/* Fulfillment Filter */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500 whitespace-nowrap">Estado Envío:</span>
+                                <div className="flex bg-gray-100 rounded-lg p-1 h-10">
+                                    {[
+                                        { value: 'all', label: 'Todos', count: stats.total },
+                                        { value: 'pending', label: 'Pendientes', count: stats.pending },
+                                        { value: 'fulfilled', label: 'Enviados', count: stats.fulfilled },
+                                    ].map((option) => (
+                                        <button
+                                            key={option.value}
+                                            onClick={() => setFulfillmentFilter(option.value as FulfillmentFilter)}
+                                            className={`px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-colors ${fulfillmentFilter === option.value
+                                                ? 'bg-white text-gray-900 shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                        >
+                                            {option.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Date Filter */}
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm text-gray-500 whitespace-nowrap"><Calendar size={16} className="inline mr-1" />Fecha:</span>
+                                <div className="relative">
+                                    <select
+                                        value={dateFilter}
+                                        onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+                                        className="appearance-none h-10 pl-3 pr-8 border border-gray-200 rounded-lg bg-gray-50 hover:bg-white text-sm focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
+                                        style={{ minWidth: '160px' }}
+                                    >
+                                        <option value="all">Histórico (250)</option>
+                                        <option value="7days">Última semana</option>
+                                        <option value="15days">Últimos 15 días</option>
+                                        <option value="30days">Último mes</option>
+                                        <option value="60days">Últimos 2 meses</option>
+                                        <option value="90days">Últimos 3 meses</option>
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                                </div>
+                            </div>
+
+                            {/* Sort Order */}
+                            <button
+                                onClick={() => setSortOrder(s => s === 'desc' ? 'asc' : 'desc')}
+                                className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors h-10"
+                            >
+                                <ArrowUpDown size={16} />
+                                <span className="text-sm font-medium">
+                                    {sortOrder === 'desc' ? 'Más recientes' : 'Más antiguos'}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Orders Table Card - Overflow hidden to contain sticky headers logic if needed */}
@@ -379,6 +461,18 @@ export default function Pedidos() {
                         <table className="w-full relative" style={{ tableLayout: 'fixed' }}>
                             <thead className="bg-gray-50 border-b border-gray-200">
                                 <tr>
+                                    <th className="px-5 py-4 w-[50px]">
+                                        <button
+                                            onClick={toggleAll}
+                                            className="text-gray-400 hover:text-rose-600 transition-colors"
+                                        >
+                                            {selectedOrders.size > 0 && selectedOrders.size === filteredOrders.length ? (
+                                                <CheckSquare size={20} className="text-rose-600" />
+                                            ) : (
+                                                <Square size={20} />
+                                            )}
+                                        </button>
+                                    </th>
                                     <th className="relative px-5 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider overflow-hidden text-ellipsis"
                                         style={{ width: columnWidths.order }}>
                                         ORDEN
@@ -462,8 +556,20 @@ export default function Pedidos() {
                                     return (
                                         <tr
                                             key={order.id}
-                                            className="hover:bg-gray-50 transition-colors duration-150"
+                                            className={`hover:bg-gray-50 transition-colors duration-150 ${selectedOrders.has(order.id) ? 'bg-rose-50/40 hover:bg-rose-50/60' : ''}`}
                                         >
+                                            <td className="px-5 py-4 relative">
+                                                <button
+                                                    onClick={() => toggleOrder(order.id)}
+                                                    className="text-gray-400 hover:text-rose-600 transition-colors"
+                                                >
+                                                    {selectedOrders.has(order.id) ? (
+                                                        <CheckSquare size={20} className="text-rose-600" />
+                                                    ) : (
+                                                        <Square size={20} />
+                                                    )}
+                                                </button>
+                                            </td>
                                             {/* Order Number */}
                                             <td className="px-5 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
                                                 <span className="font-semibold text-gray-900">{order.name}</span>
@@ -509,7 +615,7 @@ export default function Pedidos() {
                                                 {address ? (
                                                     <div className="truncate">
                                                         <p className="font-medium text-gray-700 truncate" title={address.address1}>{address.address1}</p>
-                                                        <p className="text-gray-400 truncate" title={`${address.city}, ${address.province}`}>{address.city}, {address.province}</p>
+                                                        <p className="text-gray-400 truncate" title={`${address.city}, ${address.province}`}>{address.city}, ${address.province}</p>
                                                     </div>
                                                 ) : (
                                                     <span className="text-gray-400">—</span>
@@ -584,6 +690,14 @@ export default function Pedidos() {
                     </div>
                 )}
             </Card>
+
+            <BulkFulfillModal
+                isOpen={isBulkModalOpen}
+                onClose={() => setIsBulkModalOpen(false)}
+                onConfirm={handleBulkFulfill}
+                orders={selectedOrdersList}
+                loading={isBulkFulfilling}
+            />
         </div>
     );
 }
