@@ -14,6 +14,7 @@ import {
     getStoredEdit,
     hasEditedAddress,
 } from '../utils/addressStorage';
+import { calculateShippingDate } from '../utils/shippingUtils';
 
 // Paper sizes in mm
 const PAPER_SIZES = {
@@ -93,7 +94,9 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                     <div className="flex justify-between items-center border-b border-gray-200 pb-0.5 mb-1">
                         <div className="flex items-baseline gap-1.5">
                             <span className="font-bold text-sm leading-none">{order.name}</span>
-                            <span className="text-[9px] text-gray-500 leading-none">{new Date().toLocaleDateString('es-CL')}</span>
+                            <span className="text-[9px] text-gray-500 leading-none">
+                                {calculateShippingDate(order.createdAt, order.lineItems || []).toLocaleDateString('es-CL')}
+                            </span>
                         </div>
                         <span className="font-bold text-xs leading-none">Criemos</span>
                     </div>
@@ -166,7 +169,7 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                     <div className="font-bold text-lg leading-tight">{order.name}</div>
 
                     <div className="text-xs text-gray-300">
-                        {new Date().toLocaleDateString('es-CL')}
+                        {calculateShippingDate(order.createdAt, order.lineItems || []).toLocaleDateString('es-CL')}
                     </div>
                 </div>
             </div>
