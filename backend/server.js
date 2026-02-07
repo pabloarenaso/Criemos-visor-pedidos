@@ -122,7 +122,18 @@ app.get('/api/orders', async (req, res) => {
         phone: order.customer.phone,
         ordersCount: order.customer.orders_count
       } : null,
-      shippingAddress: order.shipping_address,
+      shippingAddress: order.shipping_address ? {
+        firstName: order.shipping_address.first_name,
+        lastName: order.shipping_address.last_name,
+        company: order.shipping_address.company,
+        address1: order.shipping_address.address1,
+        address2: order.shipping_address.address2,
+        city: order.shipping_address.city,
+        province: order.shipping_address.province,
+        country: order.shipping_address.country,
+        zip: order.shipping_address.zip,
+        phone: order.shipping_address.phone
+      } : null,
       lineItems: order.line_items.map(item => ({
         id: item.id,
         title: item.title,
@@ -183,6 +194,7 @@ app.get('/api/orders/:id', async (req, res) => {
       shippingAddress: order.shipping_address ? {
         firstName: order.shipping_address.first_name,
         lastName: order.shipping_address.last_name,
+        company: order.shipping_address.company,
         address1: order.shipping_address.address1,
         address2: order.shipping_address.address2,
         city: order.shipping_address.city,

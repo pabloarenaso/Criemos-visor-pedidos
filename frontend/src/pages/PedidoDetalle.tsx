@@ -377,9 +377,11 @@ export default function PedidoDetalle() {
                                         </div>
                                     )}
                                     {(() => {
-                                        const rut = order.note_attributes?.find(attr =>
+                                        const rutAttribute = order.note_attributes?.find(attr =>
                                             ['rut', 'RUT', 'run', 'RUN', 'tax_id', 'Tax ID'].includes(attr.name)
                                         )?.value;
+                                        const rut = rutAttribute || order.shippingAddress?.company;
+
                                         return rut ? (
                                             <div className="flex items-center gap-2 text-sm pt-1 border-t border-gray-50 mt-1">
                                                 <div className="w-4 flex justify-center text-gray-400 font-bold text-[10px]">ID</div>

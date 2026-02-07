@@ -70,7 +70,7 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
     const rutAttribute = order.note_attributes?.find(attr =>
         ['rut', 'RUT', 'run', 'RUN', 'tax_id', 'Tax ID'].includes(attr.name)
     );
-    const rut = rutAttribute?.value;
+    const rut = rutAttribute?.value || order.shippingAddress?.company;
 
     // Compact Mode (12 per page)
     if (compact) {

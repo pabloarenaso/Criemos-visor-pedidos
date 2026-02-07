@@ -213,9 +213,11 @@ function AddressEditModal({ order, onClose, onSave }: AddressModalProps) {
                                             </p>
                                         )}
                                         {(() => {
-                                            const rut = order.note_attributes?.find(attr =>
+                                            const rutAttribute = order.note_attributes?.find(attr =>
                                                 ['rut', 'RUT', 'run', 'RUN', 'tax_id', 'Tax ID'].includes(attr.name)
                                             )?.value;
+                                            const rut = rutAttribute || order.shippingAddress?.company;
+
                                             return rut ? (
                                                 <p className="flex items-center gap-1 text-gray-800 font-bold mt-2 pt-2 border-t border-gray-200">
                                                     RUT: {rut}
