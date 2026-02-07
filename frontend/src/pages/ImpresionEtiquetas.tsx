@@ -55,6 +55,8 @@ function formatCurrency(value: string | number): string {
 }
 
 // Single Label Component
+import { formatRUT } from '../utils/formatters';
+
 interface LabelProps {
     order: Order;
     showProducts: boolean;
@@ -79,33 +81,54 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                 style={{ width: '100%', height: '100%', pageBreakInside: 'avoid' }}>
                 <div className="p-2 h-full flex flex-col justify-between">
                     {/* Header */}
-                    <div className="flex justify-between items-start border-b border-gray-200 pb-1 mb-1">
-                        <div>
-                            <span className="font-bold text-sm block">{order.name}</span>
-                            <span className="text-[10px] text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
+                    <div className="flex justify-between items-center border-b border-gray-200 pb-0.5 mb-1">
+                        <div className="flex items-baseline gap-1.5">
+                            <span className="font-bold text-sm leading-none">{order.name}</span>
+                            <span className="text-[9px] text-gray-500 leading-none">{new Date(order.createdAt).toLocaleDateString()}</span>
                         </div>
-                        <span className="font-bold">Criemos</span>
+                        <span className="font-bold text-xs leading-none">Criemos</span>
                     </div>
 
+                    {/* Customer Name (Buyer) if different/relevant */}
+                    {(order.customer?.firstName || order.customer?.lastName) && (
+                        <div className="mb-1">
+                            <span className="text-[10px] font-semibold block truncate leading-none text-gray-800">
+                                {order.customer.firstName} {order.customer.lastName}
+                            </span>
+                        </div>
+                    )}
+
                     {/* Address */}
-                    <div className="flex-1 min-h-0">
+                    {/* Address / Customer Details */}
+                    <div className="flex-1 min-h-0 container-details">
                         {address ? (
-                            <div className="space-y-0.5 leading-tight">
-                                <p className="font-bold text-gray-900 truncate uppercase">
+                            <div className="space-y-0.5 text-[10px] leading-tight text-gray-800">
+                                {/* 1. Nombre */}
+                                <p className="font-bold truncate">
                                     {address.firstName} {address.lastName}
                                 </p>
-                                <p className="text-gray-600 truncate">{address.address1} {address.address2}</p>
-                                <p className="text-gray-600 truncate">{address.city}, {address.province}</p>
-                                <p className="text-gray-600 truncate">{address.phone}</p>
-                                <p className="text-gray-600 truncate leading-tight font-medium text-[9px] sm:text-[10px] mt-0.5" title={order.email || order.customer?.email}>
+
+                                {/* 2. RUT */}
+                                {rut && (
+                                    <p className="truncate">
+                                        RUT: {formatRUT(rut)}
+                                    </p>
+                                )}
+
+                                {/* 3. Dirección */}
+                                <p className="truncate text-gray-600">{address.address1} {address.address2}</p>
+                                <p className="truncate text-gray-600">{address.city}, {address.province}</p>
+
+                                {/* 4. Teléfono */}
+                                <p className="truncate text-gray-600">{address.phone}</p>
+
+                                {/* 5. Email */}
+                                <p className="truncate text-gray-600" title={order.email || order.customer?.email}>
                                     {order.email || order.customer?.email || ''}
                                 </p>
-                                {rut && (
-                                    <p className="text-gray-600 truncate font-bold text-[10px]">RUT: {rut}</p>
-                                )}
                             </div>
                         ) : (
-                            <p className="text-gray-400 italic">Sin dirección</p>
+                            <p className="text-gray-400 italic text-[10px]">Sin dirección</p>
                         )}
                     </div>
 
@@ -136,7 +159,12 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                     <span className="font-bold text-lg">Criemos</span>
                 </div>
                 <div className="text-right">
-                    <div className="font-bold text-lg">{order.name}</div>
+                    <div className="font-bold text-lg leading-tight">{order.name}</div>
+                    {(order.customer?.firstName || order.customer?.lastName) && (
+                        <div className="text-xs font-medium text-gray-200 mb-0.5">
+                            {order.customer.firstName} {order.customer.lastName}
+                        </div>
+                    )}
                     <div className="text-xs text-gray-300">
                         {new Date(order.createdAt).toLocaleDateString('es-CL')}
                     </div>
@@ -144,7 +172,7 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
             </div>
 
             {/* Recipient Section */}
-            <div className="px-4 py-3 border-b border-gray-300">
+            <div className="px-4 py-3 border-b border-gray-300 mobile-recipient-section">
                 <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">
                         Destinatario
@@ -157,30 +185,39 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                 </div>
 
                 {address ? (
-                    <div className="space-y-1">
+                    <div className="space-y-1 text-sm text-gray-800">
+                        {/* 1. Nombre */}
                         <p className="font-bold text-lg text-gray-900">
                             {address.firstName} {address.lastName}
                         </p>
-                        <p className="text-sm text-gray-700">{address.address1}</p>
-                        {address.address2 && (
-                            <p className="text-sm text-gray-700">{address.address2}</p>
+
+                        {/* 2. RUT */}
+                        {rut && (
+                            <p className="font-bold">RUT: {formatRUT(rut)}</p>
                         )}
-                        <p className="text-sm text-gray-700">
+
+                        {/* 3. Dirección */}
+                        <p className="text-gray-700">{address.address1}</p>
+                        {address.address2 && (
+                            <p className="text-gray-700">{address.address2}</p>
+                        )}
+                        <p className="text-gray-700">
                             {address.city}, {address.province}
                         </p>
                         {address.zip && (
-                            <p className="text-sm text-gray-600">CP: {address.zip}</p>
+                            <p className="text-gray-600">CP: {address.zip}</p>
                         )}
+
+                        {/* 4. Teléfono */}
                         {address.phone && (
-                            <p className="text-sm text-gray-600">Tel: {address.phone}</p>
+                            <p className="text-gray-600">Tel: {address.phone}</p>
                         )}
+
+                        {/* 5. Email */}
                         {(order.email || order.customer?.email) && (
-                            <p className="text-sm text-gray-600 truncate font-medium mt-1">
+                            <p className="text-gray-600 truncate font-medium mt-1">
                                 {order.email || order.customer?.email}
                             </p>
-                        )}
-                        {rut && (
-                            <p className="text-sm text-gray-800 font-bold mt-1">RUT: {rut}</p>
                         )}
                     </div>
                 ) : (

@@ -220,7 +220,7 @@ function AddressEditModal({ order, onClose, onSave }: AddressModalProps) {
 
                                             return rut ? (
                                                 <p className="flex items-center gap-1 text-gray-800 font-bold mt-2 pt-2 border-t border-gray-200">
-                                                    RUT: {rut}
+                                                    RUT: {formatRUT(rut)}
                                                 </p>
                                             ) : null;
                                         })()}
@@ -403,6 +403,8 @@ function AddressEditModal({ order, onClose, onSave }: AddressModalProps) {
         </div>
     );
 }
+
+import { formatRUT } from '../utils/formatters';
 
 export default function PreparacionEnvio() {
     const navigate = useNavigate();
