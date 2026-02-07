@@ -41,7 +41,16 @@ function toEditedAddress(shopifyAddress: Order['shippingAddress']): EditedAddres
 function getDisplayAddress(order: Order): EditedAddress | null {
     const stored = getStoredEdit(order.id);
     if (stored) return stored.address;
-    return toEditedAddress(order.shippingAddress);
+
+    const converted = toEditedAddress(order.shippingAddress);
+    if (converted) {
+        // Fallback for name if missing in shipping address
+        if (!converted.firstName && !converted.lastName && order.customer) {
+            converted.firstName = order.customer.firstName || '';
+            converted.lastName = order.customer.lastName || '';
+        }
+    }
+    return converted;
 }
 
 // Format currency
@@ -84,19 +93,12 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                     <div className="flex justify-between items-center border-b border-gray-200 pb-0.5 mb-1">
                         <div className="flex items-baseline gap-1.5">
                             <span className="font-bold text-sm leading-none">{order.name}</span>
-                            <span className="text-[9px] text-gray-500 leading-none">{new Date(order.createdAt).toLocaleDateString()}</span>
+                            <span className="text-[9px] text-gray-500 leading-none">{new Date().toLocaleDateString('es-CL')}</span>
                         </div>
                         <span className="font-bold text-xs leading-none">Criemos</span>
                     </div>
 
-                    {/* Customer Name (Buyer) if different/relevant */}
-                    {(order.customer?.firstName || order.customer?.lastName) && (
-                        <div className="mb-1">
-                            <span className="text-[10px] font-semibold block truncate leading-none text-gray-800">
-                                {order.customer.firstName} {order.customer.lastName}
-                            </span>
-                        </div>
-                    )}
+
 
                     {/* Address */}
                     {/* Address / Customer Details */}
@@ -111,7 +113,7 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                                 {/* 2. RUT */}
                                 {rut && (
                                     <p className="truncate">
-                                        RUT: {formatRUT(rut)}
+                                        <span className="font-bold">RUT:</span> {formatRUT(rut)}
                                     </p>
                                 )}
 
@@ -120,7 +122,9 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                                 <p className="truncate text-gray-600">{address.city}, {address.province}</p>
 
                                 {/* 4. Teléfono */}
-                                <p className="truncate text-gray-600">{address.phone}</p>
+                                <p className="truncate text-gray-600">
+                                    <span className="font-bold">Teléfono:</span> {address.phone}
+                                </p>
 
                                 {/* 5. Email */}
                                 <p className="truncate text-gray-600" title={order.email || order.customer?.email}>
@@ -160,13 +164,9 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                 </div>
                 <div className="text-right">
                     <div className="font-bold text-lg leading-tight">{order.name}</div>
-                    {(order.customer?.firstName || order.customer?.lastName) && (
-                        <div className="text-xs font-medium text-gray-200 mb-0.5">
-                            {order.customer.firstName} {order.customer.lastName}
-                        </div>
-                    )}
+
                     <div className="text-xs text-gray-300">
-                        {new Date(order.createdAt).toLocaleDateString('es-CL')}
+                        {new Date().toLocaleDateString('es-CL')}
                     </div>
                 </div>
             </div>
@@ -210,7 +210,9 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
 
                         {/* 4. Teléfono */}
                         {address.phone && (
-                            <p className="text-gray-600">Tel: {address.phone}</p>
+                            <p className="text-gray-600">
+                                <span className="font-bold">Teléfono:</span> {address.phone}
+                            </p>
                         )}
 
                         {/* 5. Email */}
