@@ -66,6 +66,12 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
     const isEdited = hasEditedAddress(order.id);
     const itemCount = order.lineItems?.length || 0;
 
+    // Helper to find RUT
+    const rutAttribute = order.note_attributes?.find(attr =>
+        ['rut', 'RUT', 'run', 'RUN', 'tax_id', 'Tax ID'].includes(attr.name)
+    );
+    const rut = rutAttribute?.value;
+
     // Compact Mode (12 per page)
     if (compact) {
         return (
@@ -94,6 +100,9 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                                 <p className="text-gray-600 truncate leading-tight font-medium text-[9px] sm:text-[10px] mt-0.5" title={order.email || order.customer?.email}>
                                     {order.email || order.customer?.email || ''}
                                 </p>
+                                {rut && (
+                                    <p className="text-gray-600 truncate font-bold text-[10px]">RUT: {rut}</p>
+                                )}
                             </div>
                         ) : (
                             <p className="text-gray-400 italic">Sin dirección</p>
@@ -169,6 +178,9 @@ function ShippingLabel({ order, showProducts, compact }: LabelProps) {
                             <p className="text-sm text-gray-600 truncate font-medium mt-1">
                                 {order.email || order.customer?.email}
                             </p>
+                        )}
+                        {rut && (
+                            <p className="text-sm text-gray-800 font-bold mt-1">RUT: {rut}</p>
                         )}
                     </div>
                 ) : (

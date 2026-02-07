@@ -98,6 +98,7 @@ export interface Order {
 
     // Metadata
     note?: string;
+    note_attributes?: Array<{ name: string; value: string }>;
     tags?: string;
     source?: string;
     gateway?: string;

@@ -112,6 +112,8 @@ app.get('/api/orders', async (req, res) => {
       currency: order.currency,
       financialStatus: order.financial_status,
       fulfillmentStatus: order.fulfillment_status,
+      note: order.note,
+      note_attributes: order.note_attributes,
       customer: order.customer ? {
         id: order.customer.id,
         firstName: order.customer.first_name || '',
@@ -169,6 +171,7 @@ app.get('/api/orders/:id', async (req, res) => {
       financialStatus: order.financial_status,
       fulfillmentStatus: order.fulfillment_status,
       note: order.note,
+      note_attributes: order.note_attributes,
       customer: order.customer ? {
         id: order.customer.id,
         firstName: order.customer.first_name,

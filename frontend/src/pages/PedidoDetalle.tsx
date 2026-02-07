@@ -376,6 +376,17 @@ export default function PedidoDetalle() {
                                             </a>
                                         </div>
                                     )}
+                                    {(() => {
+                                        const rut = order.note_attributes?.find(attr =>
+                                            ['rut', 'RUT', 'run', 'RUN', 'tax_id', 'Tax ID'].includes(attr.name)
+                                        )?.value;
+                                        return rut ? (
+                                            <div className="flex items-center gap-2 text-sm pt-1 border-t border-gray-50 mt-1">
+                                                <div className="w-4 flex justify-center text-gray-400 font-bold text-[10px]">ID</div>
+                                                <span className="text-gray-700 font-medium">RUT: {rut}</span>
+                                            </div>
+                                        ) : null;
+                                    })()}
                                 </div>
                             </div>
                         ) : (
