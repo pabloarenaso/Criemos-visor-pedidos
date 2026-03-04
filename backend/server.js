@@ -432,22 +432,27 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log('\n' + '='.repeat(60));
-  console.log('🚀 Backend de Shopify iniciado correctamente');
-  console.log('='.repeat(60));
-  console.log(`📍 Servidor: http://localhost:${PORT}`);
-  console.log(`🏪 Tienda: ${SHOPIFY_SHOP}`);
-  console.log(`✅ Token configurado: ${SHOPIFY_ACCESS_TOKEN.substring(0, 15)}...`);
-  console.log('\n📋 Endpoints disponibles:');
-  console.log('  GET  /api/health              - Estado del servidor');
-  console.log('  GET  /api/shop                - Info de la tienda');
-  console.log('  GET  /api/orders              - Listar pedidos');
-  console.log('  GET  /api/orders/:id          - Pedido específico');
-  console.log('  GET  /api/orders/:id/fulfillment-orders');
-  console.log('  POST /api/orders/:id/fulfill  - Marcar como enviado');
-  console.log('  GET  /api/products            - Listar productos');
-  console.log('  GET  /api/customers           - Listar clientes');
-  console.log('='.repeat(60) + '\n');
-});
+// Iniciar servidor solo si no estamos en Vercel
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log('\n' + '='.repeat(60));
+    console.log('🚀 Backend de Shopify iniciado correctamente');
+    console.log('='.repeat(60));
+    console.log(`📍 Servidor: http://localhost:${PORT}`);
+    console.log(`🏪 Tienda: ${SHOPIFY_SHOP}`);
+    console.log(`✅ Token configurado: ${SHOPIFY_ACCESS_TOKEN.substring(0, 15)}...`);
+    console.log('\n📋 Endpoints disponibles:');
+    console.log('  GET  /api/health              - Estado del servidor');
+    console.log('  GET  /api/shop                - Info de la tienda');
+    console.log('  GET  /api/orders              - Listar pedidos');
+    console.log('  GET  /api/orders/:id          - Pedido específico');
+    console.log('  GET  /api/orders/:id/fulfillment-orders');
+    console.log('  POST /api/orders/:id/fulfill  - Marcar como enviado');
+    console.log('  GET  /api/products            - Listar productos');
+    console.log('  GET  /api/customers           - Listar clientes');
+    console.log('='.repeat(60) + '\n');
+  });
+}
+
+// Exportar la aplicación para Vercel Serverless Functions
+export default app;
